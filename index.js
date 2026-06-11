@@ -1392,8 +1392,12 @@ async function handleCommand(i) {
 
         let roleName = '—';
         if (member) {
+          const konfigRollen = new Set([
+            ...db.config.rollen.leitungsebene,
+            ...db.config.rollen.mitarbeiter,
+          ]);
           const sortedRoles = [...member.roles.cache.values()]
-            .filter(r => r.id !== i.guild.id)
+            .filter(r => konfigRollen.has(String(r.id)))
             .sort((a, b) => b.position - a.position);
           if (sortedRoles.length) roleName = sortedRoles[0].name;
         }
