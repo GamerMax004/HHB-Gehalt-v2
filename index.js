@@ -1372,35 +1372,63 @@ async function handleCommand(i) {
     if (sub === 'export') {
       if (!isLeitungsebene(i.member)) return i.reply({ content: 'Fehler: `Leitungsebene` benötigt!', ephemeral: true });
       await i.deferReply({ ephemeral: true });
-      const db   = loadDB();
-      const rc   = db.salary.rollen ?? {};
+
+      await i.guild.members.fetch().catch(() => {});
+
+      const db    = loadDB();
       const jetzt = new Date();
       const datumStr = jetzt.toLocaleDateString('de-DE', { day: '2-digit', month: 'long', year: 'numeric' });
 
+      const mpCid   = db.config.kanaele.monatliches_panel;
+      const mpKanal = mpCid ? i.guild.channels.cache.get(mpCid) : null;
+      if (!mpKanal?.isTextBased())
+        return i.followUp({ content: 'Fehler: `Monatliches-Panel-Kanal` nicht konfiguriert oder nicht gefunden!', ephemeral: true });
+
       const zeilen = Object.entries(db.users).map(([uid, nd]) => {
-        const stunden  = Math.floor((nd.gesamt_shift_sekunden ?? 0) / 3600);
-        const minuten  = Math.floor(((nd.gesamt_shift_sekunden ?? 0) % 3600) / 60);
-        const tickets  = nd.tickets ?? 0;
-        const name     = nd.benutzername || uid;
-        const urlTage  = nd.urlaubstage ?? 0;
-        const anzahl   = nd.shift_anzahl ?? 0;
-        return { uid, name, stunden, minuten, tickets, urlTage, anzahl, sekunden: nd.gesamt_shift_sekunden ?? 0 };
+        const member  = i.guild.members.cache.get(uid);
+        const stunden = Math.floor((nd.gesamt_shift_sekunden ?? 0) / 3600);
+        const minuten = Math.floor(((nd.gesamt_shift_sekunden ?? 0) % 3600) / 60);
+        const name    = member?.displayName || nd.benutzername || uid;
+
+        let roleName = '—';
+        if (member) {
+          const sortedRoles = [...member.roles.cache.values()]
+            .filter(r => r.id !== i.guild.id)
+            .sort((a, b) => b.position - a.position);
+          if (sortedRoles.length) roleName = sortedRoles[0].name;
+        }
+
+        const gehaltData = member ? gehaltBerechnen(member, nd, db) : { gesamt_gehalt: 0 };
+
+        return {
+          uid, name, stunden, minuten,
+          tickets:  nd.tickets     ?? 0,
+          urlTage:  nd.urlaubstage ?? 0,
+          anzahl:   nd.shift_anzahl ?? 0,
+          sekunden: nd.gesamt_shift_sekunden ?? 0,
+          roleName,
+          gehalt: gehaltData.gesamt_gehalt,
+        };
       }).sort((a, b) => b.sekunden - a.sekunden);
 
       const sumSek     = zeilen.reduce((s, r) => s + r.sekunden, 0);
       const sumStunden = Math.floor(sumSek / 3600);
       const sumMin     = Math.floor((sumSek % 3600) / 60);
       const sumTickets = zeilen.reduce((s, r) => s + r.tickets, 0);
+      const sumGehalt  = zeilen.reduce((s, r) => s + r.gehalt,  0);
 
-      const tabellenzeilen = zeilen.map((r, idx) => `
-        <tr class="${idx % 2 === 0 ? 'even' : 'odd'}">
+      const tabellenzeilen = zeilen.map((r, idx) =>
+        `<tr class="${idx % 2 === 0 ? 'even' : 'odd'}">
           <td class="rank">${idx + 1}</td>
           <td class="name">${escapeHtml(r.name)}</td>
+          <td class="role">${escapeHtml(r.roleName)}</td>
           <td class="center">${r.anzahl}</td>
           <td class="center">${r.stunden}h ${String(r.minuten).padStart(2, '0')}m</td>
           <td class="center">${r.tickets}</td>
           <td class="center">${r.urlTage}</td>
-        </tr>`).join('');
+          <td class="salary">${r.gehalt.toFixed(2)} €</td>
+        </tr>`
+      ).join('');
 
       const html = `<!DOCTYPE html>
 <html lang="de">
@@ -1410,199 +1438,63 @@ async function handleCommand(i) {
   <title>Gehaltsabrechnung — Hamburger Heimat Bank</title>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@300;400;600;700&display=swap');
-
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
     :root {
-      --bg:        #0f0f11;
-      --surface:   #18181c;
-      --border:    #2a2a32;
-      --accent:    #c8a96e;
-      --accent2:   #8c7a52;
-      --text:      #e8e6e0;
-      --muted:     #6b6878;
-      --even:      #1c1c22;
-      --odd:       #18181c;
+      --bg:        #0d0b0b;
+      --surface:   #181212;
+      --border:    #2e1a18;
+      --accent:    #C8341C;
+      --accent2:   #8c2414;
+      --text:      #f0ebe8;
+      --muted:     #7a6560;
+      --even:      #1c1411;
+      --odd:       #181212;
+      --salary-fg: #f5c2b0;
     }
-
-    body {
-      font-family: 'IBM Plex Sans', sans-serif;
-      background: var(--bg);
-      color: var(--text);
-      min-height: 100vh;
-      padding: 48px 32px;
-    }
-
-    .page {
-      max-width: 900px;
-      margin: 0 auto;
-    }
-
-    .header {
-      display: flex;
-      justify-content: space-between;
-      align-items: flex-end;
-      border-bottom: 1px solid var(--border);
-      padding-bottom: 24px;
-      margin-bottom: 40px;
-    }
-
-    .header-left .bank-name {
-      font-size: 11px;
-      font-weight: 600;
-      letter-spacing: 0.18em;
-      text-transform: uppercase;
-      color: var(--accent);
-      margin-bottom: 6px;
-    }
-
-    .header-left h1 {
-      font-size: 28px;
-      font-weight: 700;
-      color: var(--text);
-      letter-spacing: -0.02em;
-    }
-
-    .header-right {
-      text-align: right;
-      font-family: 'IBM Plex Mono', monospace;
-      font-size: 12px;
-      color: var(--muted);
-      line-height: 1.8;
-    }
-
-    .header-right .date-val {
-      color: var(--text);
-      font-weight: 600;
-    }
-
-    .kpi-grid {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 16px;
-      margin-bottom: 40px;
-    }
-
-    .kpi-card {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-top: 2px solid var(--accent);
-      padding: 20px 24px;
-    }
-
-    .kpi-label {
-      font-size: 10px;
-      font-weight: 600;
-      letter-spacing: 0.14em;
-      text-transform: uppercase;
-      color: var(--muted);
-      margin-bottom: 8px;
-    }
-
-    .kpi-value {
-      font-family: 'IBM Plex Mono', monospace;
-      font-size: 26px;
-      font-weight: 600;
-      color: var(--accent);
-    }
-
-    .kpi-sub {
-      font-size: 11px;
-      color: var(--muted);
-      margin-top: 4px;
-    }
-
-    .table-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 16px;
-    }
-
-    .table-title {
-      font-size: 11px;
-      font-weight: 600;
-      letter-spacing: 0.14em;
-      text-transform: uppercase;
-      color: var(--muted);
-    }
-
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      font-size: 14px;
-    }
-
-    thead tr {
-      border-bottom: 1px solid var(--accent2);
-    }
-
-    thead th {
-      font-size: 10px;
-      font-weight: 600;
-      letter-spacing: 0.12em;
-      text-transform: uppercase;
-      color: var(--muted);
-      padding: 10px 16px;
-      text-align: left;
-    }
-
+    body { font-family: 'IBM Plex Sans', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; padding: 48px 32px; }
+    .page { max-width: 960px; margin: 0 auto; }
+    .header { display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 1px solid var(--border); padding-bottom: 24px; margin-bottom: 40px; }
+    .header-left .bank-name { font-size: 11px; font-weight: 600; letter-spacing: 0.18em; text-transform: uppercase; color: var(--accent); margin-bottom: 6px; }
+    .header-left h1 { font-size: 28px; font-weight: 700; color: var(--text); letter-spacing: -0.02em; }
+    .header-right { text-align: right; font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: var(--muted); line-height: 1.8; }
+    .header-right .val { color: var(--text); font-weight: 600; }
+    .kpi-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 40px; }
+    .kpi-card { background: var(--surface); border: 1px solid var(--border); border-top: 2px solid var(--accent); padding: 20px 24px; }
+    .kpi-label { font-size: 10px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); margin-bottom: 8px; }
+    .kpi-value { font-family: 'IBM Plex Mono', monospace; font-size: 24px; font-weight: 600; color: var(--accent); }
+    .kpi-sub { font-size: 11px; color: var(--muted); margin-top: 4px; }
+    .table-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+    .table-title { font-size: 11px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); }
+    table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    thead tr { border-bottom: 1px solid var(--accent2); }
+    thead th { font-size: 10px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); padding: 10px 16px; text-align: left; }
     thead th.center { text-align: center; }
-
+    thead th.right  { text-align: right;  }
     tbody tr.even { background: var(--even); }
-    tbody tr.odd  { background: var(--odd);  }
-
-    tbody tr:hover { background: #222228; }
-
-    tbody td {
-      padding: 13px 16px;
-      border-bottom: 1px solid var(--border);
-      color: var(--text);
-      vertical-align: middle;
-    }
-
-    td.rank {
-      font-family: 'IBM Plex Mono', monospace;
-      font-size: 11px;
-      color: var(--muted);
-      width: 40px;
-    }
-
-    td.name { font-weight: 600; }
-
-    td.center {
-      text-align: center;
-      font-family: 'IBM Plex Mono', monospace;
-      font-size: 13px;
-    }
-
-    .footer {
-      margin-top: 48px;
-      padding-top: 20px;
-      border-top: 1px solid var(--border);
-      display: flex;
-      justify-content: space-between;
-      font-size: 11px;
-      color: var(--muted);
-      font-family: 'IBM Plex Mono', monospace;
-    }
+    tbody tr.odd  { background: var(--odd); }
+    tbody tr:hover { background: #221618; }
+    tbody td { padding: 13px 16px; border-bottom: 1px solid var(--border); color: var(--text); vertical-align: middle; }
+    td.rank   { font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: var(--muted); width: 40px; }
+    td.name   { font-weight: 600; }
+    td.role   { font-size: 12px; color: var(--muted); }
+    td.center { text-align: center; font-family: 'IBM Plex Mono', monospace; font-size: 13px; }
+    td.salary { text-align: right; font-family: 'IBM Plex Mono', monospace; font-size: 13px; font-weight: 600; color: var(--salary-fg); }
+    .footer { margin-top: 48px; padding-top: 20px; border-top: 1px solid var(--border); display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); font-family: 'IBM Plex Mono', monospace; }
   </style>
 </head>
 <body>
   <div class="page">
-
     <div class="header">
       <div class="header-left">
         <div class="bank-name">Hamburger Heimat Bank</div>
         <h1>Gehaltsabrechnung</h1>
       </div>
       <div class="header-right">
-        <div>Erstellt am <span class="date-val">${datumStr}</span></div>
-        <div>Angefragt von <span class="date-val">${escapeHtml(i.member.displayName)}</span></div>
-        <div>Mitarbeiter erfasst: <span class="date-val">${zeilen.length}</span></div>
+        <div>Erstellt am <span class="val">${datumStr}</span></div>
+        <div>Angefragt von <span class="val">${escapeHtml(i.member.displayName)}</span></div>
+        <div>Mitarbeiter erfasst: <span class="val">${zeilen.length}</span></div>
       </div>
     </div>
-
     <div class="kpi-grid">
       <div class="kpi-card">
         <div class="kpi-label">Gesamt-Schichtzeit</div>
@@ -1619,43 +1511,47 @@ async function handleCommand(i) {
         <div class="kpi-value">${zeilen.length}</div>
         <div class="kpi-sub">Mit Aktivitätsdaten</div>
       </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Gesamtgehalt</div>
+        <div class="kpi-value">${sumGehalt.toFixed(2)} €</div>
+        <div class="kpi-sub">Alle Mitarbeiter</div>
+      </div>
     </div>
-
-    <div class="table-header">
-      <div class="table-title">Mitarbeiter-Übersicht</div>
-    </div>
-
+    <div class="table-header"><div class="table-title">Mitarbeiter-Übersicht</div></div>
     <table>
       <thead>
         <tr>
-          <th>#</th>
-          <th>Name</th>
-          <th class="center">Schichten</th>
-          <th class="center">Schichtzeit</th>
-          <th class="center">Tickets</th>
-          <th class="center">Urlaubstage</th>
+          <th>#</th><th>Name</th><th>Rolle</th>
+          <th class="center">Schichten</th><th class="center">Schichtzeit</th>
+          <th class="center">Tickets</th><th class="center">Urlaubstage</th>
+          <th class="right">Gehalt</th>
         </tr>
       </thead>
-      <tbody>
-        ${tabellenzeilen}
-      </tbody>
+      <tbody>${tabellenzeilen}</tbody>
     </table>
-
     <div class="footer">
       <span>Copyright &copy; Hamburger Heimat Bank</span>
       <span>Gehaltsabrechnung &mdash; ${datumStr}</span>
     </div>
-
   </div>
 </body>
 </html>`;
 
       const fileName = `gehaltsabrechnung_${jetzt.toISOString().slice(0, 10)}.html`;
       const att = new AttachmentBuilder(Buffer.from(html, 'utf8'), { name: fileName });
-      await i.followUp({ files: [att], ephemeral: true });
-      const container = infoContainer(COLOR, 'Gehalt-Export', 'Gehaltsdaten als HTML-Dokument exportiert.', [
+
+      const headerContainer = new ContainerBuilder()
+        .addTextDisplayComponents(makeText(
+          `## Gehaltsabrechnung — ${datumStr}\n`
+          + `> Angefragt von ${i.user} — \`${zeilen.length}\` Mitarbeiter — Gesamtgehalt: **${sumGehalt.toFixed(2)} €**`
+        ))
+        .addTextDisplayComponents(makeText(`-# ${FOOTER_TEXT}`));
+      await mpKanal.send({ components: [headerContainer], flags: CV2_FLAG });
+      await mpKanal.send({ files: [att] });
+
+      const container = infoContainer(COLOR, 'Gehalt-Export', null, [
         `> **Angefragt von:** ${i.user}`,
-        `> **Datum:** ${tsDisc(nowTs(), 'F')}\n> **Datei:** \`${fileName}\`\n> **Mitarbeiter:** \`${zeilen.length}\``,
+        `> **Datum:** ${tsDisc(nowTs(), 'F')}\n> **Datei:** \`${fileName}\`\n> **Mitarbeiter:** \`${zeilen.length}\`\n> **Gesamtgehalt:** \`${sumGehalt.toFixed(2)} €\`\n> **Kanal:** <#${mpCid}>`,
       ]);
       return i.followUp({ components: [container], flags: CV2_FLAG, ephemeral: true });
     }
