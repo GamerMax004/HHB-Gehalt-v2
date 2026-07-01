@@ -30,6 +30,7 @@ const DB_FILE   = path.resolve('backup.json');
 const FOOTER_TEXT = 'Copyright © Hamburger Heimat Bank';
 const COLOR       = 0x393A41;
 const CV2_FLAG    = 1 << 15;
+const CV2_EPHEMERAL = CV2_FLAG | MessageFlags.Ephemeral;
 
 // Schwellenwerte
 const SHIFT_ANOMALIE_STUNDEN  = 10; // Stunden bis Warnung
@@ -847,7 +848,7 @@ const client = new Client({
   ],
 });
 
-client.once('ready', async () => {
+client.once('clientReady', async () => {
   console.log(`[Bot] Eingeloggt als ${client.user.tag} (ID: ${client.user.id})`);
 
   const rest = new REST({ version: '10' }).setToken(TOKEN);
@@ -974,7 +975,7 @@ client.on('interactionCreate', async (interaction) => {
     if (interaction.isModalSubmit())      return await handleModal(interaction);
   } catch (e) {
     console.error('[Interaction] Fehler:', e);
-    const msg = { content: `Interner Fehler: \`${e.message}\``, ephemeral: true };
+    const msg = { content: `Interner Fehler: \`${e.message}\``, flags: MessageFlags.Ephemeral };
     try {
       if (interaction.replied || interaction.deferred) await interaction.followUp(msg);
       else await interaction.reply(msg);
@@ -1006,13 +1007,13 @@ async function handleCommand(i) {
 
   // ═══ /stats ══════════════════════════════════════════════════════
   if (cmd === 'stats') {
-    if (!isMitarbeiter(i.member)) return i.reply({ content: 'Fehler: `Mitarbeiter` benötigt!', ephemeral: true });
+    if (!isMitarbeiter(i.member)) return i.reply({ content: 'Fehler: `Mitarbeiter` benötigt!', flags: MessageFlags.Ephemeral });
 
     const zielMember = i.options.getMember('user');
     const ziel       = zielMember ?? i.member;
 
     if (zielMember && String(ziel.id) !== String(i.user.id) && !isLeitungsebene(i.member))
-      return i.reply({ content: 'Fehler: `Leitungsebene` benötigt!', ephemeral: true });
+      return i.reply({ content: 'Fehler: `Leitungsebene` benötigt!', flags: MessageFlags.Ephemeral });
 
     const db  = loadDB();
     const uid = String(ziel.id);
@@ -1063,12 +1064,12 @@ async function handleCommand(i) {
       ))
       .addTextDisplayComponents(makeText(`-# ${FOOTER_TEXT}`));
 
-    return i.reply({ components: [container], flags: CV2_FLAG, ephemeral: true });
+    return i.reply({ components: [container], flags: CV2_EPHEMERAL });
   }
 
   // ═══ /urlaubskalender ═══════════════════════════════════════════
   if (cmd === 'urlaubskalender') {
-    if (!isMitarbeiter(i.member)) return i.reply({ content: 'Fehler: `Mitarbeiter` benötigt!', ephemeral: true });
+    if (!isMitarbeiter(i.member)) return i.reply({ content: 'Fehler: `Mitarbeiter` benötigt!', flags: MessageFlags.Ephemeral });
 
     const db  = loadDB();
     const now = nowTs();
@@ -1106,12 +1107,12 @@ async function handleCommand(i) {
       .addTextDisplayComponents(makeText(zeilen))
       .addTextDisplayComponents(makeText(`-# ${FOOTER_TEXT}`));
 
-    return i.reply({ components: [container], flags: CV2_FLAG, ephemeral: true });
+    return i.reply({ components: [container], flags: CV2_EPHEMERAL });
   }
 
   // ═══ /shift ═════════════════════════════════════════════════════
   if (cmd === 'shift') {
-    if (!isMitarbeiter(i.member)) return i.reply({ content: 'Fehler: `Mitarbeiter` benötigt!', ephemeral: true });
+    if (!isMitarbeiter(i.member)) return i.reply({ content: 'Fehler: `Mitarbeiter` benötigt!', flags: MessageFlags.Ephemeral });
 
     if (sub === 'manage') {
       const db   = loadDB();
@@ -1138,11 +1139,11 @@ async function handleCommand(i) {
         .addSeparatorComponents(makeSeparator())
         .addTextDisplayComponents(makeText(zeilen))
         .addTextDisplayComponents(makeText(`-# ${FOOTER_TEXT}`));
-      return i.reply({ components: [container], flags: CV2_FLAG, ephemeral: true });
+      return i.reply({ components: [container], flags: CV2_EPHEMERAL });
     }
 
     if (sub === 'leaderboard') {
-      await i.deferReply({ ephemeral: true });
+      await i.deferReply({ flags: MessageFlags.Ephemeral });
       await i.guild.members.fetch().catch(() => {});
       const db      = loadDB();
       const alleIds = new Set([...db.config.rollen.leitungsebene, ...db.config.rollen.mitarbeiter]);
@@ -1162,20 +1163,20 @@ async function handleCommand(i) {
         .addSeparatorComponents(makeSeparator())
         .addTextDisplayComponents(makeText(zeilen))
         .addTextDisplayComponents(makeText(`-# ${FOOTER_TEXT}`));
-      return i.followUp({ components: [container], flags: CV2_FLAG, ephemeral: true });
+      return i.followUp({ components: [container], flags: CV2_EPHEMERAL });
     }
 
     if (sub === 'admin') {
-      if (!isLeitungsebene(i.member)) return i.reply({ content: 'Fehler: `Leitungsebene` benötigt!', ephemeral: true });
+      if (!isLeitungsebene(i.member)) return i.reply({ content: 'Fehler: `Leitungsebene` benötigt!', flags: MessageFlags.Ephemeral });
       const ziel = i.options.getMember('user');
       const db   = loadDB();
-      return i.reply({ ...buildShiftAdminContainer(ziel, db), ephemeral: true });
+      return i.reply({ ...buildShiftAdminContainer(ziel, db), flags: CV2_EPHEMERAL });
     }
   }
 
   // ═══ /leave ══════════════════════════════════════════════════════
   if (cmd === 'leave') {
-    if (!isMitarbeiter(i.member)) return i.reply({ content: 'Fehler: `Mitarbeiter` benötigt!', ephemeral: true });
+    if (!isMitarbeiter(i.member)) return i.reply({ content: 'Fehler: `Mitarbeiter` benötigt!', flags: MessageFlags.Ephemeral });
 
     if (sub === 'manage') {
       const db     = loadDB();
@@ -1209,7 +1210,7 @@ async function handleCommand(i) {
         .addActionRowComponents(row)
         .addTextDisplayComponents(makeText(`-# ${FOOTER_TEXT}`));
 
-      return i.reply({ components: [container], flags: CV2_FLAG, ephemeral: true });
+      return i.reply({ components: [container], flags: CV2_EPHEMERAL });
     }
 
     if (sub === 'active') {
@@ -1239,7 +1240,7 @@ async function handleCommand(i) {
     }
 
     if (sub === 'admin') {
-      if (!isLeitungsebene(i.member)) return i.reply({ content: 'Fehler: `Leitungsebene` benötigt!', ephemeral: true });
+      if (!isLeitungsebene(i.member)) return i.reply({ content: 'Fehler: `Leitungsebene` benötigt!', flags: MessageFlags.Ephemeral });
       const ziel  = i.options.getMember('user');
       const uid   = String(ziel.id);
       const db    = loadDB();
@@ -1290,14 +1291,14 @@ async function handleCommand(i) {
         .addActionRowComponents(row)
         .addTextDisplayComponents(makeText(`-# ${FOOTER_TEXT}`));
 
-      return i.reply({ components: [container], flags: CV2_FLAG, ephemeral: true });
+      return i.reply({ components: [container], flags: CV2_EPHEMERAL });
     }
   }
 
   // ═══ /ticket ═════════════════════════════════════════════════════
   if (cmd === 'ticket') {
     if (sub === 'leaderboard') {
-      if (!isMitarbeiter(i.member)) return i.reply({ content: 'Fehler: `Mitarbeiter` benötigt!', ephemeral: true });
+      if (!isMitarbeiter(i.member)) return i.reply({ content: 'Fehler: `Mitarbeiter` benötigt!', flags: MessageFlags.Ephemeral });
       const db     = loadDB();
       const sorted = Object.entries(db.users)
         .filter(([, d]) => (d.tickets ?? 0) > 0)
@@ -1312,11 +1313,11 @@ async function handleCommand(i) {
         .addSeparatorComponents(makeSeparator())
         .addTextDisplayComponents(makeText(zeilen))
         .addTextDisplayComponents(makeText(`-# ${FOOTER_TEXT}`));
-      return i.reply({ components: [container], flags: CV2_FLAG, ephemeral: true });
+      return i.reply({ components: [container], flags: CV2_EPHEMERAL });
     }
 
     if (sub === 'admin') {
-      if (!isLeitungsebene(i.member)) return i.reply({ content: 'Fehler: `Leitungsebene` benötigt!', ephemeral: true });
+      if (!isLeitungsebene(i.member)) return i.reply({ content: 'Fehler: `Leitungsebene` benötigt!', flags: MessageFlags.Ephemeral });
       const user   = i.options.getMember('user');
       const aktion = i.options.getString('aktion');
       const anzahl = i.options.getInteger('anzahl');
@@ -1335,26 +1336,26 @@ async function handleCommand(i) {
         `> **Aktion:** \`${aktText}\``,
         `> **Tickets:** \`${nachher}\``,
       ]);
-      return i.reply({ components: [container], flags: CV2_FLAG, ephemeral: true });
+      return i.reply({ components: [container], flags: CV2_EPHEMERAL });
     }
   }
 
   // ═══ /gehalt ═════════════════════════════════════════════════════
   if (cmd === 'gehalt') {
     if (sub === 'anzeigen') {
-      if (!isMitarbeiter(i.member)) return i.reply({ content: 'Fehler: `Mitarbeiter` benötigt!', ephemeral: true });
+      if (!isMitarbeiter(i.member)) return i.reply({ content: 'Fehler: `Mitarbeiter` benötigt!', flags: MessageFlags.Ephemeral });
       const zielMember = i.options.getMember('user');
       const ziel       = zielMember ?? i.member;
       if (zielMember && String(ziel.id) !== String(i.user.id) && !isLeitungsebene(i.member))
-        return i.reply({ content: 'Fehler: `Leitungsebene` benötigt!', ephemeral: true });
+        return i.reply({ content: 'Fehler: `Leitungsebene` benötigt!', flags: MessageFlags.Ephemeral });
       const db  = loadDB();
       const uid = String(ziel.id);
-      if (!db.users[uid]) return i.reply({ content: `Noch keine Daten für <@${uid}> gefunden!`, ephemeral: true });
-      return i.reply({ ...buildGehaltContainer(i.guild, ziel, gehaltBerechnen(ziel, db.users[uid], db)), ephemeral: true });
+      if (!db.users[uid]) return i.reply({ content: `Noch keine Daten für <@${uid}> gefunden!`, flags: MessageFlags.Ephemeral });
+      return i.reply({ ...buildGehaltContainer(i.guild, ziel, gehaltBerechnen(ziel, db.users[uid], db)), flags: CV2_EPHEMERAL });
     }
 
     if (sub === 'konfigurieren') {
-      if (!isAdmin(i.user.id)) return i.reply({ content: 'Fehler: `Administrator` benötigt!', ephemeral: true });
+      if (!isAdmin(i.user.id)) return i.reply({ content: 'Fehler: `Administrator` benötigt!', flags: MessageFlags.Ephemeral });
       const kat   = i.options.getString('kategorie');
       const rolle = i.options.getRole('rolle');
       const bet   = i.options.getNumber('betrag');
@@ -1366,12 +1367,12 @@ async function handleCommand(i) {
       const container = infoContainer(COLOR, 'Gehalt konfiguriert', null, [
         `> **Rolle:** ${rolle}\n> **Kategorie:** ${kat === 'shift' ? 'Schicht (pro Stunde)' : 'Ticket (pro Ticket)'}\n> **Betrag:** **${bet.toFixed(2)} €**`,
       ]);
-      return i.reply({ components: [container], flags: CV2_FLAG, ephemeral: true });
+      return i.reply({ components: [container], flags: CV2_EPHEMERAL });
     }
 
     if (sub === 'export') {
-      if (!isLeitungsebene(i.member)) return i.reply({ content: 'Fehler: `Leitungsebene` benötigt!', ephemeral: true });
-      await i.deferReply({ ephemeral: true });
+      if (!isLeitungsebene(i.member)) return i.reply({ content: 'Fehler: `Leitungsebene` benötigt!', flags: MessageFlags.Ephemeral });
+      await i.deferReply({ flags: MessageFlags.Ephemeral });
 
       await i.guild.members.fetch().catch(() => {});
 
@@ -1382,7 +1383,7 @@ async function handleCommand(i) {
       const mpCid   = db.config.kanaele.monatliches_panel;
       const mpKanal = mpCid ? i.guild.channels.cache.get(mpCid) : null;
       if (!mpKanal?.isTextBased())
-        return i.followUp({ content: 'Fehler: `Monatliches-Panel-Kanal` nicht konfiguriert oder nicht gefunden!', ephemeral: true });
+        return i.followUp({ content: 'Fehler: `Monatliches-Panel-Kanal` nicht konfiguriert oder nicht gefunden!', flags: MessageFlags.Ephemeral });
 
       const zeilen = Object.entries(db.users).map(([uid, nd]) => {
         const member  = i.guild.members.cache.get(uid);
@@ -1554,11 +1555,11 @@ async function handleCommand(i) {
         `> **Angefragt von:** ${i.user}`,
         `> **Datum:** ${tsDisc(nowTs(), 'F')}\n> **Datei:** \`${fileName}\`\n> **Mitarbeiter:** \`${zeilen.length}\`\n> **Gesamtgehalt:** \`${sumGehalt.toFixed(2)} €\`\n> **Kanal:** <#${mpCid}>`,
       ]);
-      return i.followUp({ components: [container], flags: CV2_FLAG, ephemeral: true });
+      return i.followUp({ components: [container], flags: CV2_EPHEMERAL });
     }
 
     if (sub === 'reset') {
-      if (!isAdmin(i.user.id)) return i.reply({ content: 'Fehler: `Administrator` benötigt!', ephemeral: true });
+      if (!isAdmin(i.user.id)) return i.reply({ content: 'Fehler: `Administrator` benötigt!', flags: MessageFlags.Ephemeral });
       const container = new ContainerBuilder()
         .addTextDisplayComponents(makeText('## Gehalt zurücksetzen'))
         .addSeparatorComponents(makeSeparator())
@@ -1572,14 +1573,14 @@ async function handleCommand(i) {
         new ButtonBuilder().setCustomId('reset_confirm').setLabel('Zurücksetzen').setStyle(ButtonStyle.Danger),
         new ButtonBuilder().setCustomId('reset_cancel').setLabel('Abbrechen').setStyle(ButtonStyle.Secondary),
       );
-      return i.reply({ components: [container, row], flags: CV2_FLAG, ephemeral: true });
+      return i.reply({ components: [container, row], flags: CV2_EPHEMERAL });
     }
   }
 
   // ═══ /konfiguriere ═══════════════════════════════════════════════
   if (cmd === 'konfiguriere') {
-    if (!isAdmin(i.user.id)) return i.reply({ content: 'Fehler: `Administrator` benötigt!', ephemeral: true });
-    await i.deferReply({ ephemeral: true });
+    if (!isAdmin(i.user.id)) return i.reply({ content: 'Fehler: `Administrator` benötigt!', flags: MessageFlags.Ephemeral });
+    await i.deferReply({ flags: MessageFlags.Ephemeral });
 
     if (sub === 'rolle') {
       const stufe = i.options.getString('stufe');
@@ -1592,7 +1593,7 @@ async function handleCommand(i) {
       const container = infoContainer(COLOR, 'Konfiguration gespeichert', null, [
         `> **Rolle:** ${rolle}\n> **Berechtigung:** \`${stufe}\``,
       ]);
-      return i.followUp({ components: [container], flags: CV2_FLAG, ephemeral: true });
+      return i.followUp({ components: [container], flags: CV2_EPHEMERAL });
     }
 
     if (sub === 'kanal') {
@@ -1615,7 +1616,7 @@ async function handleCommand(i) {
 
       if (funktion === 'panel') await panelEmbedSenden(kanal);
 
-      return i.followUp({ components: [container], flags: CV2_FLAG, ephemeral: true });
+      return i.followUp({ components: [container], flags: CV2_EPHEMERAL });
     }
 
     if (sub === 'mindestshift') {
@@ -1632,44 +1633,44 @@ async function handleCommand(i) {
       const container = infoContainer(COLOR, 'Mindestshift konfiguriert', desc, [
         `> **Rolle:** ${rolle}\n> **Mindestshift:** \`${stunden.toFixed(1)}\` Stunden/Monat`,
       ]);
-      return i.followUp({ components: [container], flags: CV2_FLAG, ephemeral: true });
+      return i.followUp({ components: [container], flags: CV2_EPHEMERAL });
     }
   }
 
   // ═══ /monatspanel ════════════════════════════════════════════════
   if (cmd === 'monatspanel' && sub === 'senden') {
-    if (!isLeitungsebene(i.member)) return i.reply({ content: 'Fehler: `Leitungsebene` benötigt!', ephemeral: true });
+    if (!isLeitungsebene(i.member)) return i.reply({ content: 'Fehler: `Leitungsebene` benötigt!', flags: MessageFlags.Ephemeral });
     const db  = loadDB();
     const cid = db.config.kanaele.monatliches_panel;
-    if (!cid) return i.reply({ content: 'Fehler: `Monatliches-Panel-Kanal` nicht konfiguriert!', ephemeral: true });
+    if (!cid) return i.reply({ content: 'Fehler: `Monatliches-Panel-Kanal` nicht konfiguriert!', flags: MessageFlags.Ephemeral });
     const ch = i.guild.channels.cache.get(cid);
-    if (!ch)  return i.reply({ content: 'Fehler: Kanal nicht gefunden!', ephemeral: true });
-    await i.deferReply({ ephemeral: true });
+    if (!ch)  return i.reply({ content: 'Fehler: Kanal nicht gefunden!', flags: MessageFlags.Ephemeral });
+    await i.deferReply({ flags: MessageFlags.Ephemeral });
     await monatlichesPanelSenden(i.guild, ch);
     const container = infoContainer(COLOR, 'Monatspanel gesendet', `Das Monatspanel wurde in ${ch} gesendet.`);
-    return i.followUp({ components: [container], flags: CV2_FLAG, ephemeral: true });
+    return i.followUp({ components: [container], flags: CV2_EPHEMERAL });
   }
 
   // ═══ /backup ═════════════════════════════════════════════════════
   if (cmd === 'backup') {
-    if (!isAdmin(i.user.id)) return i.reply({ content: 'Fehler: `Administrator` benötigt!', ephemeral: true });
+    if (!isAdmin(i.user.id)) return i.reply({ content: 'Fehler: `Administrator` benötigt!', flags: MessageFlags.Ephemeral });
     const db  = loadDB();
     const cid = db.config.kanaele.backup;
-    if (!cid) return i.reply({ content: 'Fehler: `Backup-Kanal` nicht konfiguriert!', ephemeral: true });
+    if (!cid) return i.reply({ content: 'Fehler: `Backup-Kanal` nicht konfiguriert!', flags: MessageFlags.Ephemeral });
     const ch = i.guild.channels.cache.get(cid);
-    if (!ch)  return i.reply({ content: 'Fehler: `Backup-Kanal` nicht gefunden!', ephemeral: true });
-    await i.deferReply({ ephemeral: true });
+    if (!ch)  return i.reply({ content: 'Fehler: `Backup-Kanal` nicht gefunden!', flags: MessageFlags.Ephemeral });
+    await i.deferReply({ flags: MessageFlags.Ephemeral });
     await backupSenden(ch);
     const container = infoContainer(COLOR, 'Backup gesendet', `Die Datenbank wurde als JSON in ${ch} gesichert.`);
-    return i.followUp({ components: [container], flags: CV2_FLAG, ephemeral: true });
+    return i.followUp({ components: [container], flags: CV2_EPHEMERAL });
   }
 
   // ═══ /reload ═════════════════════════════════════════════════════
   if (cmd === 'reload') {
-    if (!isAdmin(i.user.id)) return i.reply({ content: 'Fehler: `Administrator` benötigt!', ephemeral: true });
+    if (!isAdmin(i.user.id)) return i.reply({ content: 'Fehler: `Administrator` benötigt!', flags: MessageFlags.Ephemeral });
     const att = i.options.getAttachment('datei');
-    if (!att.name.endsWith('.json')) return i.reply({ content: 'Fehler: Bitte nur `.json`-Dateien hochladen!', ephemeral: true });
-    await i.deferReply({ ephemeral: true });
+    if (!att.name.endsWith('.json')) return i.reply({ content: 'Fehler: Bitte nur `.json`-Dateien hochladen!', flags: MessageFlags.Ephemeral });
+    await i.deferReply({ flags: MessageFlags.Ephemeral });
 
     try {
       const res  = await fetch(att.url);
@@ -1686,9 +1687,9 @@ async function handleCommand(i) {
         `> **Datei:** \`${att.name}\``,
         `> **Zeitpunkt:** ${tsDisc(nowTs(), 'F')}`,
       ]);
-      return i.followUp({ components: [container], flags: CV2_FLAG, ephemeral: true });
+      return i.followUp({ components: [container], flags: CV2_EPHEMERAL });
     } catch (e) {
-      return i.followUp({ content: `Fehler beim Einspielen: \`${e.message}\``, ephemeral: true });
+      return i.followUp({ content: `Fehler beim Einspielen: \`${e.message}\``, flags: MessageFlags.Ephemeral });
     }
   }
 }
@@ -1706,7 +1707,7 @@ async function handleButton(i) {
     const uid    = parts.slice(2).join('_');
 
     if (String(i.user.id) !== uid) {
-      return i.reply({ content: 'Diese Buttons gehören nicht dir.', ephemeral: true });
+      return i.reply({ content: 'Diese Buttons gehören nicht dir.', flags: MessageFlags.Ephemeral });
     }
 
     const db = loadDB();
@@ -1730,7 +1731,7 @@ async function handleButton(i) {
 
     if (action === 'pause') {
       const s = db.shifts[uid];
-      if (!s || s.status !== 'aktiv') return i.reply({ content: 'Fehler: Shift nicht aktiv!', ephemeral: true });
+      if (!s || s.status !== 'aktiv') return i.reply({ content: 'Fehler: Shift nicht aktiv!', flags: MessageFlags.Ephemeral });
       s.status = 'pausiert'; s.pause_start = now;
       saveDB(db);
       return i.update({ ...buildShiftContainer(i.member, 'pausiert', db) });
@@ -1738,7 +1739,7 @@ async function handleButton(i) {
 
     if (action === 'end') {
       const s = db.shifts[uid];
-      if (!s) return i.reply({ content: 'Fehler: Kein aktiver Shift!', ephemeral: true });
+      if (!s) return i.reply({ content: 'Fehler: Kein aktiver Shift!', flags: MessageFlags.Ephemeral });
       let pause = s.gesamt_pause_sekunden ?? 0;
       if (s.status === 'pausiert') pause += now - (s.pause_start ?? now);
       const gesamt = Math.max(0, (s.gespeicherte_sekunden ?? 0) + (now - (s.start_zeit ?? now)) - pause);
@@ -1777,10 +1778,10 @@ async function handleButton(i) {
     const uid            = String(i.user.id);
     const blockierung    = hatAktivenOderAusstehendUrlaub(db, uid);
     if (blockierung === 'aktiv') {
-      return i.reply({ content: '> Du hast bereits einen **aktiven Urlaub**. Wende dich an die Leitungsebene, falls du einen weiteren benötigst.', ephemeral: true });
+      return i.reply({ content: '> Du hast bereits einen **aktiven Urlaub**. Wende dich an die Leitungsebene, falls du einen weiteren benötigst.', flags: MessageFlags.Ephemeral });
     }
     if (blockierung === 'ausstehend') {
-      return i.reply({ content: '> Du hast bereits einen **ausstehenden Antrag**. Warte bis dieser bearbeitet wurde.', ephemeral: true });
+      return i.reply({ content: '> Du hast bereits einen **ausstehenden Antrag**. Warte bis dieser bearbeitet wurde.', flags: MessageFlags.Ephemeral });
     }
 
     return i.showModal(
@@ -1804,11 +1805,11 @@ async function handleButton(i) {
       .addSeparatorComponents(makeSeparator())
       .addTextDisplayComponents(makeText(zeilen.join('\n') || 'Keine Urlaubseinträge.'))
       .addTextDisplayComponents(makeText(`-# ${FOOTER_TEXT}`));
-    return i.reply({ components: [container], flags: CV2_FLAG, ephemeral: true });
+    return i.reply({ components: [container], flags: CV2_EPHEMERAL });
   }
 
   if (id.startsWith('gen_approve_') || id.startsWith('gen_reject_')) {
-    if (!isLeitungsebene(i.member)) return i.reply({ content: 'Fehler: `Leitungsebene` benötigt!', ephemeral: true });
+    if (!isLeitungsebene(i.member)) return i.reply({ content: 'Fehler: `Leitungsebene` benötigt!', flags: MessageFlags.Ephemeral });
     const parts  = id.split('_');
     const action = parts[1];
     const uid    = parts[2];
@@ -1863,7 +1864,7 @@ async function handleButton(i) {
         .addTextDisplayComponents(makeText(`-# ${FOOTER_TEXT}`));
 
       await i.message.edit({ components: [updatedContainer], flags: CV2_FLAG });
-      return i.reply({ content: 'Antrag genehmigt!', ephemeral: true });
+      return i.reply({ content: 'Antrag genehmigt!', flags: MessageFlags.Ephemeral });
     }
 
     if (action === 'reject') {
@@ -1908,12 +1909,12 @@ async function handleButton(i) {
         .addTextDisplayComponents(makeText(`-# ${FOOTER_TEXT}`));
 
       await i.message.edit({ components: [updatedContainer], flags: CV2_FLAG });
-      return i.reply({ content: 'Antrag abgelehnt!', ephemeral: true });
+      return i.reply({ content: 'Antrag abgelehnt!', flags: MessageFlags.Ephemeral });
     }
   }
 
   if (id.startsWith('la_start_')) {
-    if (!isLeitungsebene(i.member)) return i.reply({ content: 'Fehler: `Leitungsebene` benötigt!', ephemeral: true });
+    if (!isLeitungsebene(i.member)) return i.reply({ content: 'Fehler: `Leitungsebene` benötigt!', flags: MessageFlags.Ephemeral });
     return i.showModal(
       new ModalBuilder().setCustomId(`m_la_start_${id.slice(9)}`).setTitle('Urlaub starten')
         .addComponents(
@@ -1924,7 +1925,7 @@ async function handleButton(i) {
   }
 
   if (id.startsWith('la_end_')) {
-    if (!isLeitungsebene(i.member)) return i.reply({ content: 'Fehler: `Leitungsebene` benötigt!', ephemeral: true });
+    if (!isLeitungsebene(i.member)) return i.reply({ content: 'Fehler: `Leitungsebene` benötigt!', flags: MessageFlags.Ephemeral });
     return i.showModal(
       new ModalBuilder().setCustomId(`m_la_end_${id.slice(7)}`).setTitle('Aktiven Urlaub beenden')
         .addComponents(
@@ -1934,7 +1935,7 @@ async function handleButton(i) {
   }
 
   if (id.startsWith('la_ext_')) {
-    if (!isLeitungsebene(i.member)) return i.reply({ content: 'Fehler: `Leitungsebene` benötigt!', ephemeral: true });
+    if (!isLeitungsebene(i.member)) return i.reply({ content: 'Fehler: `Leitungsebene` benötigt!', flags: MessageFlags.Ephemeral });
     return i.showModal(
       new ModalBuilder().setCustomId(`m_la_ext_${id.slice(7)}`).setTitle('Urlaub verlängern')
         .addComponents(
@@ -1955,35 +1956,35 @@ async function handleButton(i) {
       .addSeparatorComponents(makeSeparator())
       .addTextDisplayComponents(makeText(zeilen.join('\n') || 'Keine Einträge.'))
       .addTextDisplayComponents(makeText(`-# ${FOOTER_TEXT}`));
-    return i.reply({ components: [container], flags: CV2_FLAG, ephemeral: true });
+    return i.reply({ components: [container], flags: CV2_EPHEMERAL });
   }
 
   if (id.startsWith('sa_')) {
-    if (!isLeitungsebene(i.member)) return i.reply({ content: 'Fehler: `Leitungsebene` benötigt!', ephemeral: true });
+    if (!isLeitungsebene(i.member)) return i.reply({ content: 'Fehler: `Leitungsebene` benötigt!', flags: MessageFlags.Ephemeral });
     const action = id.split('_')[1];
     const uid    = id.split('_').slice(2).join('_');
     const db     = loadDB();
 
     if (action === 'start') {
-      if (db.shifts[uid]?.status === 'aktiv') return i.reply({ content: 'Fehler: Shift bereits aktiv!', ephemeral: true });
+      if (db.shifts[uid]?.status === 'aktiv') return i.reply({ content: 'Fehler: Shift bereits aktiv!', flags: MessageFlags.Ephemeral });
       const mName = i.guild?.members.cache.get(uid)?.displayName ?? uid;
       db.shifts[uid] = { status: 'aktiv', start_zeit: now, pause_start: null, gesamt_pause_sekunden: 0, gespeicherte_sekunden: 0, benutzername: mName };
       db.notified.shift_anomalie[uid] = false;
       saveDB(db);
-      return i.reply({ content: `Shift für <@${uid}> gestartet.`, ephemeral: true });
+      return i.reply({ content: `Shift für <@${uid}> gestartet.`, flags: MessageFlags.Ephemeral });
     }
 
     if (action === 'pause') {
       const s = db.shifts[uid];
-      if (!s || s.status !== 'aktiv') return i.reply({ content: 'Fehler: Shift nicht aktiv!', ephemeral: true });
+      if (!s || s.status !== 'aktiv') return i.reply({ content: 'Fehler: Shift nicht aktiv!', flags: MessageFlags.Ephemeral });
       s.status = 'pausiert'; s.pause_start = now;
       saveDB(db);
-      return i.reply({ content: `Shift pausiert.`, ephemeral: true });
+      return i.reply({ content: `Shift pausiert.`, flags: MessageFlags.Ephemeral });
     }
 
     if (action === 'end') {
       const s = db.shifts[uid];
-      if (!s) return i.reply({ content: 'Fehler: Kein aktiver Shift!', ephemeral: true });
+      if (!s) return i.reply({ content: 'Fehler: Kein aktiver Shift!', flags: MessageFlags.Ephemeral });
       let pause = s.gesamt_pause_sekunden ?? 0;
       if (s.status === 'pausiert') pause += now - (s.pause_start ?? now);
       const gesamt = Math.max(0, (s.gespeicherte_sekunden ?? 0) + (now - (s.start_zeit ?? now)) - pause);
@@ -1994,7 +1995,7 @@ async function handleButton(i) {
       delete db.notified.shift_anomalie[uid];
       delete db.shifts[uid];
       saveDB(db);
-      return i.reply({ content: `Shift beendet (+${formatDuration(gesamt)}).`, ephemeral: true });
+      return i.reply({ content: `Shift beendet (+${formatDuration(gesamt)}).`, flags: MessageFlags.Ephemeral });
     }
 
     if (action === 'edit') {
@@ -2012,7 +2013,7 @@ async function handleButton(i) {
       delete db.shifts[uid];
       delete db.notified.shift_anomalie[uid];
       saveDB(db);
-      return i.reply({ content: `Aktive Shift von <@${uid}> gelöscht.`, ephemeral: true });
+      return i.reply({ content: `Aktive Shift von <@${uid}> gelöscht.`, flags: MessageFlags.Ephemeral });
     }
 
     if (action === 'clear') {
@@ -2023,12 +2024,12 @@ async function handleButton(i) {
       db.users[uid].shift_anzahl            = 0;
       db.users[uid].laengste_shift_sekunden = 0;
       saveDB(db);
-      return i.reply({ content: `Alle Shiftdaten von <@${uid}> zurückgesetzt.`, ephemeral: true });
+      return i.reply({ content: `Alle Shiftdaten von <@${uid}> zurückgesetzt.`, flags: MessageFlags.Ephemeral });
     }
   }
 
   if (id === 'reset_confirm') {
-    if (!isAdmin(i.user.id)) return i.reply({ content: 'Fehler: `Administrator` benötigt!', ephemeral: true });
+    if (!isAdmin(i.user.id)) return i.reply({ content: 'Fehler: `Administrator` benötigt!', flags: MessageFlags.Ephemeral });
 
     const db  = loadDB();
     const cid = db.config.kanaele.backup;
@@ -2079,9 +2080,9 @@ async function handleModal(i) {
   if (id === 'm_ticket') {
     const db  = loadDB();
     const cid = db.config.kanaele.dokumentationen;
-    if (!cid) return i.reply({ content: 'Fehler: `Dokumentationskanal` nicht konfiguriert!', ephemeral: true });
+    if (!cid) return i.reply({ content: 'Fehler: `Dokumentationskanal` nicht konfiguriert!', flags: MessageFlags.Ephemeral });
     const kanal = i.guild.channels.cache.get(cid);
-    if (!kanal) return i.reply({ content: 'Fehler: `Dokumentationskanal` nicht gefunden!', ephemeral: true });
+    if (!kanal) return i.reply({ content: 'Fehler: `Dokumentationskanal` nicht gefunden!', flags: MessageFlags.Ephemeral });
 
     const ticketName = i.fields.getTextInputValue('ticket_name');
     const worum      = i.fields.getTextInputValue('worum');
@@ -2117,27 +2118,27 @@ async function handleModal(i) {
       ))
       .addTextDisplayComponents(makeText(`-# ${FOOTER_TEXT}`));
 
-    return i.reply({ components: [bestContainer], flags: CV2_FLAG, ephemeral: true });
+    return i.reply({ components: [bestContainer], flags: CV2_EPHEMERAL });
   }
 
   if (id === 'm_urlaub_antrag') {
-    await i.deferReply({ ephemeral: true });
+    await i.deferReply({ flags: MessageFlags.Ephemeral });
 
     const db  = loadDB();
     const uid = String(i.user.id);
 
     const blockierung = hatAktivenOderAusstehendUrlaub(db, uid);
     if (blockierung === 'aktiv') {
-      return i.followUp({ content: '> Du hast bereits einen **aktiven Urlaub**. Wende dich an die Leitungsebene.', ephemeral: true });
+      return i.followUp({ content: '> Du hast bereits einen **aktiven Urlaub**. Wende dich an die Leitungsebene.', flags: MessageFlags.Ephemeral });
     }
     if (blockierung === 'ausstehend') {
-      return i.followUp({ content: '> Du hast bereits einen **ausstehenden Antrag**. Warte bis dieser bearbeitet wurde.', ephemeral: true });
+      return i.followUp({ content: '> Du hast bereits einen **ausstehenden Antrag**. Warte bis dieser bearbeitet wurde.', flags: MessageFlags.Ephemeral });
     }
 
     const cid = db.config.kanaele.urlaubsantraege;
-    if (!cid) return i.followUp({ content: 'Fehler: `Urlaubsantraege-Kanal` nicht konfiguriert!', ephemeral: true });
+    if (!cid) return i.followUp({ content: 'Fehler: `Urlaubsantraege-Kanal` nicht konfiguriert!', flags: MessageFlags.Ephemeral });
     const kanal = i.guild.channels.cache.get(cid);
-    if (!kanal) return i.followUp({ content: 'Fehler: Kanal nicht gefunden!', ephemeral: true });
+    if (!kanal) return i.followUp({ content: 'Fehler: Kanal nicht gefunden!', flags: MessageFlags.Ephemeral });
 
     const begruendung = i.fields.getTextInputValue('begruendung');
     const dauer       = i.fields.getTextInputValue('dauer');
@@ -2197,7 +2198,7 @@ async function handleModal(i) {
       ))
       .addTextDisplayComponents(makeText(`-# ${FOOTER_TEXT}`));
 
-    return i.followUp({ components: [bestaetigung], flags: CV2_FLAG, ephemeral: true });
+    return i.followUp({ components: [bestaetigung], flags: CV2_EPHEMERAL });
   }
 
   if (id.startsWith('m_la_start_')) {
@@ -2216,23 +2217,23 @@ async function handleModal(i) {
     saveDB(db);
     const m = i.guild?.members.cache.get(uid);
     if (m) await dmGenehmigt(i.guild, m, dauer, endTs);
-    return i.reply({ content: `Urlaub für <@${uid}> gestartet (${formatDauer(dauer)}). Endet ${tsDisc(endTs, 'F')}.`, ephemeral: true });
+    return i.reply({ content: `Urlaub für <@${uid}> gestartet (${formatDauer(dauer)}). Endet ${tsDisc(endTs, 'F')}.`, flags: MessageFlags.Ephemeral });
   }
 
   if (id.startsWith('m_la_end_')) {
     const uid  = id.slice(9);
     const best = i.fields.getTextInputValue('bestaetigung');
-    if (best.toUpperCase() !== 'BEENDEN') return i.reply({ content: 'Fehler: Bestätigungswort falsch!', ephemeral: true });
+    if (best.toUpperCase() !== 'BEENDEN') return i.reply({ content: 'Fehler: Bestätigungswort falsch!', flags: MessageFlags.Ephemeral });
     const db    = loadDB();
     const aktiv = db.leave[uid]?.aktiv ?? [];
-    if (!aktiv.length) return i.reply({ content: 'Fehler: Kein aktiver Urlaub!', ephemeral: true });
+    if (!aktiv.length) return i.reply({ content: 'Fehler: Kein aktiver Urlaub!', flags: MessageFlags.Ephemeral });
     const startTs = aktiv[0].start_zeitstempel ?? nowTs();
     db.leave[uid].aktiv = aktiv.slice(1);
     delete db.notified.urlaub_ende[uid];
     saveDB(db);
     const m = i.guild?.members.cache.get(uid);
     if (m) await dmBeendet(i.guild, m, startTs);
-    return i.reply({ content: `Urlaub von <@${uid}> beendet.`, ephemeral: true });
+    return i.reply({ content: `Urlaub von <@${uid}> beendet.`, flags: MessageFlags.Ephemeral });
   }
 
   if (id.startsWith('m_la_ext_')) {
@@ -2240,14 +2241,14 @@ async function handleModal(i) {
     const zusatz = i.fields.getTextInputValue('zusatz');
     const db     = loadDB();
     const aktiv  = db.leave[uid]?.aktiv ?? [];
-    if (!aktiv.length) return i.reply({ content: 'Fehler: Kein aktiver Urlaub!', ephemeral: true });
+    if (!aktiv.length) return i.reply({ content: 'Fehler: Kein aktiver Urlaub!', flags: MessageFlags.Ephemeral });
     aktiv[0].end_zeitstempel = (aktiv[0].end_zeitstempel ?? nowTs()) + dauerZuSekunden(zusatz);
     db.leave[uid].aktiv = aktiv;
     delete db.notified.urlaub_ende[uid];
     saveDB(db);
     const m = i.guild?.members.cache.get(uid);
     if (m) await dmGenehmigt(i.guild, m, zusatz, aktiv[0].end_zeitstempel);
-    return i.reply({ content: `Urlaub von <@${uid}> um **${formatDauer(zusatz)}** verlängert. Neues Ende: ${tsDisc(aktiv[0].end_zeitstempel, 'F')}`, ephemeral: true });
+    return i.reply({ content: `Urlaub von <@${uid}> um **${formatDauer(zusatz)}** verlängert. Neues Ende: ${tsDisc(aktiv[0].end_zeitstempel, 'F')}`, flags: MessageFlags.Ephemeral });
   }
 
   if (id.startsWith('m_sa_edit_')) {
@@ -2255,7 +2256,7 @@ async function handleModal(i) {
     const raw = i.fields.getTextInputValue('wert');
     let modus, sekunden;
     try { ({ modus, sekunden } = parseZeitEingabe(raw)); }
-    catch (e) { return i.reply({ content: `Fehler: \`${e.message}\` — Bitte Format \`+HH:MM\`, \`-HH:MM\` oder \`=HH:MM\` verwenden.`, ephemeral: true }); }
+    catch (e) { return i.reply({ content: `Fehler: \`${e.message}\` — Bitte Format \`+HH:MM\`, \`-HH:MM\` oder \`=HH:MM\` verwenden.`, flags: MessageFlags.Ephemeral }); }
     const db = loadDB();
     ensureUser(db, uid);
     const vorher = db.users[uid].gesamt_shift_sekunden ?? 0;
@@ -2263,7 +2264,7 @@ async function handleModal(i) {
     else db.users[uid].gesamt_shift_sekunden = Math.max(0, vorher + (modus === '+' ? sekunden : -sekunden));
     saveDB(db);
     const aktion = modus === '=' ? 'gesetzt auf' : modus === '+' ? 'hinzugefügt' : 'abgezogen';
-    return i.reply({ content: `**${formatDuration(sekunden)}** ${aktion}. Neu: **${formatDuration(db.users[uid].gesamt_shift_sekunden)}**`, ephemeral: true });
+    return i.reply({ content: `**${formatDuration(sekunden)}** ${aktion}. Neu: **${formatDuration(db.users[uid].gesamt_shift_sekunden)}**`, flags: MessageFlags.Ephemeral });
   }
 }
 
